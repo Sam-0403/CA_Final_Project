@@ -1,14 +1,15 @@
 // Your code
-module CHIP(clk,
-            rst_n,
-            // For mem_D
-            mem_wen_D,
-            mem_addr_D,
-            mem_wdata_D,
-            mem_rdata_D,
-            // For mem_I
-            mem_addr_I,
-            mem_rdata_I);
+module CHIP(
+    clk,
+    rst_n,
+    // For mem_D
+    mem_wen_D,
+    mem_addr_D,
+    mem_wdata_D,
+    mem_rdata_D,
+    // For mem_I
+    mem_addr_I,
+    mem_rdata_I);
 
     input         clk, rst_n ;
     // For mem_D
@@ -33,6 +34,19 @@ module CHIP(clk,
     //---------------------------------------//
 
     // Todo: other wire/reg
+    wire   [2:0] type         ; // R:0, I:1, S:2, B:3, U:4, J:5
+    wire   [2:0] func         ;
+    //--------------------------------------------//
+    //--R------I------S------B------U------J------//
+    //0:ADD    JALR   SW     BEQ    LUI    JAL
+    //1:SUB    LW            BNE    AUIPC
+    //2:MUL    ADDI          BLT
+    //3:       SLTI          BGE
+    //4:
+    //5:
+    //6:
+    //7:
+    //--------------------------------------------//
 
     //---------------------------------------//
     // Do not modify this part!!!            //
@@ -49,6 +63,91 @@ module CHIP(clk,
     //---------------------------------------//
     
     // Todo: any combinational/sequential circuit
+    // Instruction fetch
+    // mem_rdata_I(OK)
+
+    always @(*) begin // Instruction decode
+        case(mem_rdata_I[6:0])
+            7'b01101111:begin
+                type = 3'b100   // U-type
+                func = 3'b000   // LUI
+            end
+            7'b0010111:begin
+                type = 3'b100   // U-type
+                func = 3'b001   // AUIPC
+            end
+            7'b1101111:begin
+                type = 3'b101   // J-type
+                func = 3'b000   // JAL
+            end
+            7'b1100111:begin
+                type = 3'b001   // I-type
+                func = 3'b000   // JALR
+            end
+            7'b1100011:begin
+                type = 3'b011   // B-type
+                case(mem_rdata_I[14:12])
+                    3'b000:begin
+                        func = 3'b000   // BEQ
+                    end
+                    3'b001:begin
+                        func = 3'b001   // BNE
+                    end
+                    3'b100:begin
+                        func = 3'b010   // BLT
+                    end
+                    3'b101:begin
+                        func = 3'b011   // BGE
+                    end
+                endcase
+            end
+            7'b0000011:begin
+                type = 3'b001   // I-type
+                func = 3'b001   // LW
+            end
+            7'b0100011:begin
+                type = 3'b010   // S-type
+                func = 3'b000   // SW
+            end
+            7'b0010011:begin
+                type = 3'b001   // I-type
+                case(mem_rdata_I[14:12])
+                    3'b000:begin
+                        func = 3'b010   // ADDI
+                    end
+                    3'b010:begin
+                        func = 3'b011   // SLTI
+                    end
+                endcase
+            end
+            7'b0110011:begin
+                type = 3'b001   // I-type
+                case(mem_rdata_I[31:25])
+                    7'b0000000:begin
+                        func = 3'b000   // ADD
+                    end
+                    7'b0100000:begin
+                        func = 3'b001   // SUB
+                    end
+                    7'b0000001:begin
+                        func = 3'b010   // MUL
+                    end
+                endcase
+            end
+        endcase
+    end
+
+    always @(*) begin // Execution
+        
+    end
+
+    always @(*) begin // Memory access
+        
+    end
+
+    always @(*) begin // Write back 
+        
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
