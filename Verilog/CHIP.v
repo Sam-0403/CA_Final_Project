@@ -34,9 +34,22 @@ module CHIP(
     //---------------------------------------//
 
     // Todo: other wire/reg
-    wire   [2:0] type         ; // R:0, I:1, S:2, B:3, U:4, J:5
-    wire   [2:0] func         ;
-    wire   [31:0]imm = 0;
+    reg   [31:0] PC_nxt       ; // may conflict with wire PC_nxt ??
+    reg   [2:0] type, type_nxt; // if necessary ?
+    reg   [2:0] func, func_nxt;
+    wire  [31:0] imm         ;
+    reg   [31:0] alu_out     ;
+
+    // Definition of type
+    // R:0, I:1, S:2, B:3, U:4, J:5
+    parameter R = 3'b000;
+    parameter I = 3'b001;
+    parameter S = 3'b010;
+    parameter B = 3'b011;
+    parameter U = 3'b100;
+    parameter J = 3'b101;
+    // func may also parameterized ?
+
     //--------------------------------------------//
     //--R------I------S------B------U------J------//
     //0:ADD    JALR   SW     BEQ    LUI    JAL
@@ -64,43 +77,76 @@ module CHIP(
     //---------------------------------------//
     
     // Todo: any combinational/sequential circuit
-    // Instruction fetch
+    // Wire assignments
+    // output
+    assign  mem_wen_D = (ctrl == );
+    assign  mem_addr_D = alu_out;
+    assign  mem_wdata_D = q2;
+    assign  mem_addr_I = PC_nxt;
+    // input internal wires for reg0
+    assign  regWrite = (type == I and func == 3'b001) ? 1 : 0;  // Load
+    assign  rs1 = (type == U or type == J) ? 0 : mem_rdata_I[19:15];
+    assign  rs2 = (type == R or type == S or type == B) ? mem_rdata_I[24:20] : 0;
+    assign  rd = (type == S or type == B) ? 0 : mem_rdata_I[11:7];
+    assign  rd_data = alu_out  // in reg0, rd_data will update only if Load
+    // imm is too complex, may consider to replaced by imm_reg ?
+    //---------------------------------------//
+    assign  imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
+    assign  imm[20] = (type == U) ? mem_rdata_I[20] : 
+                      (type == J) ? mem_rdata_I[31] : 0;
+    assign  imm[19:13] = (type == U or type == J) ? mem_rdata_I[19:13] : 0;
+    assign  imm[12] = (type == B) ? mem_rdata_I[31] : 
+                      (type == U or type == J) ? mem_rdata_I[12] : 0;
+    assign  imm[11] = (type == B) ? mem_rdata_I[7] :
+                      (type == J) ? mem_rdata_I[20] : 
+                      (type == R or type = U) ? 0 : mem_rdata_I[31];
+    assign  imm[10:5] = (type == R or type = U) ? 0 : mem_rdata_I[30:25];
+    assign  imm[4:1] = (type == I or type == J) ? mem_rdata_I[24:21] : 
+                       (type == S or type == B) ? mem_rdata_I[11:8] : 0;
+    assign  imm[0] = (type == I) ? mem_rdata_I[20] :
+                     (type == S) ? mem_rdata_I[7] : 0;
+    //---------------------------------------//
+
+    // flush control haven't added yet
+    // 
+    always @(*) begin // Instruction fetch
+        case(type)
+            I: begin
+                if (func == 3'b000) PC_nxt = rs1_data + imm;   // jalr
+                else                PC_nxt = PC + 3'b100;
+            end
+            B: begin
+                if (alu_out == 0) PC_nxt = PC + imm; // shift left is done by EX ??
+                else              PC_nxt = PC + 3'b100;
+            end
+            J: begin
+                PC_nxt = PC + imm;
+            end
+            default: PC_nxt = PC + 3'b100;
+        endcase
+    end
     // mem_rdata_I(OK)
 
     always @(*) begin // Instruction decode
         case(mem_rdata_I[6:0])
             7'b01101111:begin
-                type = 3'b100;   // U-type
+                type = U;   // U-type
                 func = 3'b000;   // LUI
-                rd = mem_rdata_I[11:7];
-                imm[11:0] = 0;
-                imm[31:12] = mem_rdata_I[31:12];
             end
             7'b0010111:begin
-                type = 3'b100;   // U-type
+                type = U;   // U-type
                 func = 3'b001;   // AUIPC
-                rd = mem_rdata_I[11:7];
-                imm[11:0] = 0;
-                imm[31:12] = mem_rdata_I[31:12];
             end
             7'b1101111:begin
-                type = 3'b101;   // J-type
+                type = J;   // J-type
                 func = 3'b000;   // JAL
-                rd = mem_rdata_I[11:7];
-                imm[20] = mem_rdata_I[31];
-                imm[19:12] = mem_rdata_I[19:12];
-                imm[11] = mem_rdata_I[20];
-                imm[10:1] = mem_rdata_I[30:21];
             end
             7'b1100111:begin
-                type = 3'b001;   // I-type
+                type = I;   // I-type
                 func = 3'b000;   // JALR
-                rd = mem_rdata_I[11:7];
-                rs1 = mem_rdata_I[19:15];
-                imm[11:0] = mem_rdata_I[31:20];
             end
             7'b1100011:begin
-                type = 3'b011;   // B-type
+                type = B;   // B-type
                 case(mem_rdata_I[14:12])
                     3'b000:begin
                         func = 3'b000;   // BEQ
@@ -117,28 +163,17 @@ module CHIP(
                 endcase
                 rs1 = mem_rdata_I[19:15];
                 rs2 = mem_rdata_I[24:20];
-                imm[12] = mem_rdata_I[31];
-                imm[11] = mem_rdata_I[7];
-                imm[10:5] = mem_rdata_I[30:25];
-                imm[4:1] = mem_rdata_I[11:8];
             end
             7'b0000011:begin
-                type = 3'b001;   // I-type
+                type = I;   // I-type
                 func = 3'b001;   // LW
-                rd = mem_rdata_I[11:7];
-                rs1 = mem_rdata_I[19:15];
-                imm[11:0] = mem_rdata_I[31:20];
             end
             7'b0100011:begin
-                type = 3'b010;   // S-type
+                type = S;   // S-type
                 func = 3'b000;   // SW
-                rs1 = mem_rdata_I[19:15];
-                rs2 = mem_rdata_I[24:20];
-                imm[11:5] = mem_rdata_I[31:25];
-                imm[4:0] = mem_rdata_I[11:7];
             end
             7'b0010011:begin
-                type = 3'b001;   // I-type
+                type = I;   // I-type
                 case(mem_rdata_I[14:12])
                     3'b000:begin
                         func = 3'b010;   // ADDI
@@ -147,12 +182,9 @@ module CHIP(
                         func = 3'b011;   // SLTI
                     end
                 endcase
-                rd = mem_rdata_I[11:7];
-                rs1 = mem_rdata_I[19:15];
-                imm[11:0] = mem_rdata_I[31:20];
             end
             7'b0110011:begin
-                type = 3'b001;   // I-type
+                type = I;   // I-type
                 case(mem_rdata_I[31:25])
                     7'b0000000:begin
                         func = 3'b000;   // ADD
@@ -164,56 +196,50 @@ module CHIP(
                         func = 3'b010;   // MUL
                     end
                 endcase
-                rd = mem_rdata_I[11:7];
-                rs1 = mem_rdata_I[19:15];
-                rs2 = mem_rdata_I[24:20];
             end
         endcase
     end
 
-    always @(*) begin // Execution
+    // will use module reg_file
+    always @(*) begin  // Execution
         case(type)
-            3'b000:begin        //R-type
-                regWrite = 0;
+            R:begin        //R-type
                 case(func)
                     3'b000:begin    //ADD
-                        rd_data = rs1_data + rs2_data;
+                        alu_out = q1 + q2;
                     end
                     3'b001:begin    //SUB
-                        rd_data = rs1_data - rs2_data;
+                        alu_out = q1 - q2;
                     end
                     3'b010:begin    //MUL
                         //Wait!!
                     end
                 endcase
             end
-            3'b001:begin        //I-type
+            I:begin        //I-type
                 case(func)
-                    3'b000:begin    //JALR
-                        
-                    end
                     3'b001:begin    //LW
-                        
+                        alu_out = q1 + imm;
                     end
                     3'b010:begin    //ADDI
-                        
+                        alu_out = q1 + imm;
                     end
                     3'b011:begin    //SLTI
                         
                     end
                 endcase
             end
-            3'b010:begin        //S-type
+            S:begin        //S-type
                 case(func)
                     3'b000:begin    //SW
-                        
+                        alu_out = q1 + imm;
                     end
                 endcase
             end
-            3'b011:begin        //B-type
+            B:begin        //B-type
                 case(func)
                     3'b000:begin    //BEQ
-                        
+                        alu_out = q1 - q2;
                     end
                     3'b001:begin    //BNE
                         
@@ -226,7 +252,7 @@ module CHIP(
                     end
                 endcase
             end
-            3'b100:begin        //U-type
+            U:begin        //U-type
                 case(func)
                     3'b000:begin    //LUI
                         
@@ -236,7 +262,7 @@ module CHIP(
                     end
                 endcase
             end
-            3'b101:begin        //J-type
+            J:begin        //J-type
                 case(func)
                     3'b000:begin    //JAL
                         
@@ -248,7 +274,7 @@ module CHIP(
 
     always @(*) begin // Memory access
         case(type)
-            3'b001:begin        //I-type
+            I:begin        //I-type
                 case(func)
                     3'b000:begin    //JALR
                         
@@ -264,14 +290,14 @@ module CHIP(
                     end
                 endcase
             end
-            3'b010:begin        //S-type
+            S:begin        //S-type
                 case(func)
                     3'b000:begin    //SW
                         
                     end
                 endcase
             end
-            3'b100:begin        //U-type
+            U:begin        //U-type
                 case(func)
                     3'b000:begin    //LUI
                         
@@ -281,7 +307,7 @@ module CHIP(
                     end
                 endcase
             end
-            3'b101:begin        //J-type
+            J:begin        //J-type
                 case(func)
                     3'b000:begin    //JAL
                         
@@ -298,14 +324,17 @@ module CHIP(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
-            
+            type <= 0;
+            func <= 0;
         end
         else begin
             PC <= PC_nxt;
-            
-        end
+            type <= type_nxt;
+            func <= func_nxt;
+        end 
     end
 endmodule
+
 
 module reg_file(clk, rst_n, wen, a1, a2, aw, d, q1, q2);
    
