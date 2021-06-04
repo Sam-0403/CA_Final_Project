@@ -89,6 +89,7 @@ module CHIP(
     assign  mem_wdata_D = q2;
     assign  mem_addr_I = PC_nxt;
     // input internal wires for reg0
+    // assign 這邊的條件語法好像有錯，在幫我改一下 謝謝！
     assign  regWrite = (type == I and func == 3'b001) ? 1 : 0;  // Load
     assign  rs1 = (type == U or type == J) ? 0 : mem_rdata_I[19:15];
     assign  rs2 = (type == R or type == S or type == B) ? mem_rdata_I[24:20] : 0;
@@ -96,15 +97,17 @@ module CHIP(
     assign  rd_data = write_rd;  
 
 
-    always @(*) begin       //已改成signed extension，看有沒有問題～
+    always @(*) begin
         case(type)
             I:begin
                 imm[11:0]  = mem_rdata_I[31:20];
                 imm[31:12] = {20{imm[11]}};
+            end
             S:begin
                 imm[11:5]  = mem_rdata_I[31:25];
                 imm[4:0]   = mem_rdata_I[11:7];
                 imm[31:12] = {20{imm[11]}};
+            end
             B:begin
                 imm[12] = mem_rdata_I[31];
                 imm[11] = mem_rdata_I[7];
@@ -112,6 +115,7 @@ module CHIP(
                 imm[4:1]   = mem_rdata_I[11:8];
                 imm[0]  = 1'b0;
                 imm[31:13] = {19{imm[11]}};
+            end
             U:begin
                 imm[31:12] = mem_rdata_I[31:12];
                 imm[11:0]  = {12{1'b0}};
