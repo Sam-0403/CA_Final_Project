@@ -25,7 +25,8 @@ module CHIP(
     // Do not modify this part!!!            //
     // Exception: You may change wire to reg //
     reg    [31:0] PC          ;              //
-    wire   [31:0] PC_nxt      ;              //
+    /*wire   [31:0] PC_nxt      ;*/          //
+    reg   [31:0] PC_nxt       ;              //
     wire          regWrite    ;              //
     wire   [ 4:0] rs1, rs2, rd;              //
     wire   [31:0] rs1_data    ;              //
@@ -34,11 +35,15 @@ module CHIP(
     //---------------------------------------//
 
     // Todo: other wire/reg
-    reg   [31:0] PC_nxt       ; // may conflict with wire PC_nxt ??
-    reg   [2:0] type, type_nxt; // if necessary ?
-    reg   [2:0] func, func_nxt;
-    wire  [31:0] imm         ;
-    reg   [31:0] alu_out     ;
+    //reg   [31:0] PC_nxt        ; // may conflict with wire PC_nxt ?? //or use wire only?? we can just assign it
+    reg   [2:0]  type, type_nxt; // if necessary ?(maybe not nxt)
+    reg   [2:0]  func, func_nxt; // (maybe not nxt
+    /*wire  [31:0] imm         ;*/
+    reg   [31:0] imm           ;
+    reg   [31:0] alu_out       ;
+    reg   check_branch         ; 
+    reg   write_rd             ;
+    reg   ctrl                 ;     
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -79,7 +84,7 @@ module CHIP(
     // Todo: any combinational/sequential circuit
     // Wire assignments
     // output
-    assign  mem_wen_D = (ctrl == );
+    assign  mem_wen_D = ctrl;
     assign  mem_addr_D = alu_out;
     assign  mem_wdata_D = q2;
     assign  mem_addr_I = PC_nxt;
@@ -88,10 +93,12 @@ module CHIP(
     assign  rs1 = (type == U or type == J) ? 0 : mem_rdata_I[19:15];
     assign  rs2 = (type == R or type == S or type == B) ? mem_rdata_I[24:20] : 0;
     assign  rd = (type == S or type == B) ? 0 : mem_rdata_I[11:7];
-    assign  rd_data = alu_out  // in reg0, rd_data will update only if Load
-    // imm is too complex, may consider to replaced by imm_reg ?
+    /* change alu_out to write_rd */
+    assign  rd_data = write_rd  // in reg0, rd_data will update only if Load(mem_rdata_D) <- No!!!
+
+    // imm is too complex, may consider to replaced by imm_reg ? 對！我搞錯了嗚嗚
     //---------------------------------------//
-    assign  imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
+    /*assign  imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
     assign  imm[20] = (type == U) ? mem_rdata_I[20] : 
                       (type == J) ? mem_rdata_I[31] : 0;
     assign  imm[19:13] = (type == U or type == J) ? mem_rdata_I[19:13] : 0;
@@ -104,11 +111,31 @@ module CHIP(
     assign  imm[4:1] = (type == I or type == J) ? mem_rdata_I[24:21] : 
                        (type == S or type == B) ? mem_rdata_I[11:8] : 0;
     assign  imm[0] = (type == I) ? mem_rdata_I[20] :
-                     (type == S) ? mem_rdata_I[7] : 0;
+                     (type == S) ? mem_rdata_I[7] : 0;*/
     //---------------------------------------//
+    always @(*) begin       //還要改成signed extension
+        imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
+        imm[20]    = (type == U) ? mem_rdata_I[20] : 
+                     (type == J) ? mem_rdata_I[31] : 0;
+        imm[19:13] = (type == U or type == J) ? mem_rdata_I[19:13] : 0;
+        imm[12]    = (type == B) ? mem_rdata_I[31] : 
+                     (type == U or type == J) ? mem_rdata_I[12] : 0;
+        imm[11]    = (type == B) ? mem_rdata_I[7] :
+                     (type == J) ? mem_rdata_I[20] : 
+                     (type == R or type = U) ? 0 : mem_rdata_I[31];
+        imm[10:5]  = (type == R or type = U) ? 0 : mem_rdata_I[30:25];
+        imm[4:1]   = (type == I or type == J) ? mem_rdata_I[24:21] : 
+                     (type == S or type == B) ? mem_rdata_I[11:8] : 0;
+        imm[0]     = (type == I) ? mem_rdata_I[20] :
+                     (type == S) ? mem_rdata_I[7] : 0;
+    end
+    //----------------------------------------// Changed to reg!!
+
 
     // flush control haven't added yet
     // 
+    //----------------------------------------------------------------//
+    //maybe after exe?
     always @(*) begin // Instruction fetch
         case(type)
             I: begin
@@ -125,7 +152,7 @@ module CHIP(
             default: PC_nxt = PC + 3'b100;
         endcase
     end
-    // mem_rdata_I(OK)
+    //----------------------------------------------------------------//
 
     always @(*) begin // Instruction decode
         case(mem_rdata_I[6:0])
@@ -199,17 +226,19 @@ module CHIP(
             end
         endcase
     end
-
+    //---------------------------------------------------//
     // will use module reg_file
-    always @(*) begin  // Execution
+    /*always @(*) begin  // Execution
         case(type)
             R:begin        //R-type
                 case(func)
                     3'b000:begin    //ADD
                         alu_out = q1 + q2;
+                        ctrl = 0;
                     end
                     3'b001:begin    //SUB
                         alu_out = q1 - q2;
+                        ctrl = 0;
                     end
                     3'b010:begin    //MUL
                         //Wait!!
@@ -220,9 +249,11 @@ module CHIP(
                 case(func)
                     3'b001:begin    //LW
                         alu_out = q1 + imm;
+                        ctrl = 0;
                     end
                     3'b010:begin    //ADDI
                         alu_out = q1 + imm;
+                        ctrl = 0;
                     end
                     3'b011:begin    //SLTI
                         
@@ -233,32 +264,39 @@ module CHIP(
                 case(func)
                     3'b000:begin    //SW
                         alu_out = q1 + imm;
+                        ctrl = 1;
                     end
                 endcase
             end
             B:begin        //B-type
                 case(func)
                     3'b000:begin    //BEQ
-                        alu_out = q1 - q2;
+                        check_branch = (q1==q2) ?1 :0;
+                        ctrl = 0;
                     end
                     3'b001:begin    //BNE
-                        
+                        check_branch = (q1!=q2) ?1 :0;
+                        ctrl = 0;
                     end
                     3'b010:begin    //BLT
-                        
+                        check_branch = (q1<q2) ?1 :0;
+                        ctrl = 0;
                     end
                     3'b011:begin    //BGE
-                        
+                        check_branch = (q1>=q2) ?1 :0;
+                        ctrl = 0;
                     end
                 endcase
             end
             U:begin        //U-type
                 case(func)
                     3'b000:begin    //LUI
-                        
+                        alu_out = imm;
+                        ctrl = 0;
                     end
                     3'b001:begin    //AUIPC
-                        
+                        alu_out = PC + imm;
+                        ctrl = 0;
                     end
                 endcase
             end
@@ -319,6 +357,109 @@ module CHIP(
 
     always @(*) begin // Write back 
         
+    end*/
+    //---------------------------------------------------//
+    always @(*) begin
+        case(type)
+            R:begin        //R-type
+                case(func)
+                    3'b000:begin    //ADD
+                        write_rd = q1 + q2;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b001:begin    //SUB
+                        write_rd = q1 - q2;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b010:begin    //MUL
+                        //Wait!!
+                    end
+                endcase
+            end
+            I:begin        //I-type
+                case(func)
+                    3'b000:begin    //JALR
+                        ctrl = 0;
+                        write_rd = PC + 4;
+                        PC_nxt = q1 + imm;
+                    end
+                    3'b001:begin    //LW
+                        alu_out = q1 + imm;
+                        ctrl = 0;
+                        write_rd = mem_rdata_D;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b010:begin    //ADDI
+                        write_rd = q1 + imm;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b011:begin    //SLTI
+                        write_rd = (q1<imm) ? 1 : 0;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                endcase
+            end
+            S:begin        //S-type
+                case(func)
+                    3'b000:begin    //SW
+                        alu_out = q1 + imm;
+                        ctrl = 1;
+                        PC_nxt = PC + 4;
+                    end
+                endcase
+            end
+            B:begin        //B-type
+                case(func)
+                    3'b000:begin    //BEQ
+                        check_branch = (q1==q2) ?1 :0;
+                        ctrl = 0;
+                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                    end
+                    3'b001:begin    //BNE
+                        check_branch = (q1!=q2) ?1 :0;
+                        ctrl = 0;
+                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                    end
+                    3'b010:begin    //BLT
+                        check_branch = (q1<q2) ?1 :0;
+                        ctrl = 0;
+                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                    end
+                    3'b011:begin    //BGE
+                        check_branch = (q1>=q2) ?1 :0;
+                        ctrl = 0;
+                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                    end
+                endcase
+            end
+            U:begin        //U-type
+                case(func)
+                    3'b000:begin    //LUI
+                        alu_out = imm;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b001:begin    //AUIPC
+                        alu_out = PC + imm;
+                        ctrl = 0;
+                        PC_nxt = PC + 4;
+                    end
+                endcase
+            end
+            J:begin        //J-type
+                case(func)
+                    3'b000:begin    //JAL
+                        ctrl = 0;
+                        write_rd = PC + 4;
+                        PC_nxt = PC + imm;
+                    end
+                endcase
+            end
+        endcase
     end
 
     always @(posedge clk or negedge rst_n) begin
