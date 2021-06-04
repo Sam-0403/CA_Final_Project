@@ -26,7 +26,7 @@ module CHIP(
     // Exception: You may change wire to reg //
     reg    [31:0] PC          ;              //
     /*wire   [31:0] PC_nxt      ;*/          //
-    reg   [31:0] PC_nxt       ;              //
+    reg    [31:0] PC_nxt      ;              //
     wire          regWrite    ;              //
     wire   [ 4:0] rs1, rs2, rd;              //
     wire   [31:0] rs1_data    ;              //
@@ -42,8 +42,8 @@ module CHIP(
     reg   [31:0] imm           ;
     reg   [31:0] alu_out       ;
     reg   check_branch         ; 
-    reg   write_rd             ;
-    reg   ctrl                 ;     
+    reg   [31:0] write_rd      ;
+    reg   ctrl                 ; // for mem_wen_D
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -84,7 +84,7 @@ module CHIP(
     // Todo: any combinational/sequential circuit
     // Wire assignments
     // output
-    assign  mem_wen_D = ctrl;
+    assign  mem_wen_D  = ctrl;
     assign  mem_addr_D = alu_out;
     assign  mem_wdata_D = q2;
     assign  mem_addr_I = PC_nxt;
@@ -92,42 +92,40 @@ module CHIP(
     assign  regWrite = (type == I and func == 3'b001) ? 1 : 0;  // Load
     assign  rs1 = (type == U or type == J) ? 0 : mem_rdata_I[19:15];
     assign  rs2 = (type == R or type == S or type == B) ? mem_rdata_I[24:20] : 0;
-    assign  rd = (type == S or type == B) ? 0 : mem_rdata_I[11:7];
-    /* change alu_out to write_rd */
-    assign  rd_data = write_rd  // in reg0, rd_data will update only if Load(mem_rdata_D) <- No!!!
+    assign  rd  = (type == S or type == B) ? 0 : mem_rdata_I[11:7];
+    assign  rd_data = write_rd;  
 
-    // imm is too complex, may consider to replaced by imm_reg ? 對！我搞錯了嗚嗚
-    //---------------------------------------//
-    /*assign  imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
-    assign  imm[20] = (type == U) ? mem_rdata_I[20] : 
-                      (type == J) ? mem_rdata_I[31] : 0;
-    assign  imm[19:13] = (type == U or type == J) ? mem_rdata_I[19:13] : 0;
-    assign  imm[12] = (type == B) ? mem_rdata_I[31] : 
-                      (type == U or type == J) ? mem_rdata_I[12] : 0;
-    assign  imm[11] = (type == B) ? mem_rdata_I[7] :
-                      (type == J) ? mem_rdata_I[20] : 
-                      (type == R or type = U) ? 0 : mem_rdata_I[31];
-    assign  imm[10:5] = (type == R or type = U) ? 0 : mem_rdata_I[30:25];
-    assign  imm[4:1] = (type == I or type == J) ? mem_rdata_I[24:21] : 
-                       (type == S or type == B) ? mem_rdata_I[11:8] : 0;
-    assign  imm[0] = (type == I) ? mem_rdata_I[20] :
-                     (type == S) ? mem_rdata_I[7] : 0;*/
-    //---------------------------------------//
-    always @(*) begin       //還要改成signed extension
-        imm[31:21] = (type == U) ? mem_rdata_I[31:21] : 0;
-        imm[20]    = (type == U) ? mem_rdata_I[20] : 
-                     (type == J) ? mem_rdata_I[31] : 0;
-        imm[19:13] = (type == U or type == J) ? mem_rdata_I[19:13] : 0;
-        imm[12]    = (type == B) ? mem_rdata_I[31] : 
-                     (type == U or type == J) ? mem_rdata_I[12] : 0;
-        imm[11]    = (type == B) ? mem_rdata_I[7] :
-                     (type == J) ? mem_rdata_I[20] : 
-                     (type == R or type = U) ? 0 : mem_rdata_I[31];
-        imm[10:5]  = (type == R or type = U) ? 0 : mem_rdata_I[30:25];
-        imm[4:1]   = (type == I or type == J) ? mem_rdata_I[24:21] : 
-                     (type == S or type == B) ? mem_rdata_I[11:8] : 0;
-        imm[0]     = (type == I) ? mem_rdata_I[20] :
-                     (type == S) ? mem_rdata_I[7] : 0;
+
+    always @(*) begin       //已改成signed extension，看有沒有問題～
+        case(type)
+            I:begin
+                imm[11:0]  = mem_rdata_I[31:20];
+                imm[31:12] = {20{imm[11]}};
+            S:begin
+                imm[11:5]  = mem_rdata_I[31:25];
+                imm[4:0]   = mem_rdata_I[11:7];
+                imm[31:12] = {20{imm[11]}};
+            B:begin
+                imm[12] = mem_rdata_I[31];
+                imm[11] = mem_rdata_I[7];
+                imm[10:5]  = mem_rdata_I[30:25];
+                imm[4:1]   = mem_rdata_I[11:8];
+                imm[0]  = 1'b0;
+                imm[31:13] = {19{imm[11]}};
+            U:begin
+                imm[31:12] = mem_rdata_I[31:12];
+                imm[11:0]  = {12{1'b0}};
+            end
+            J:begin
+                imm[20] = mem_rdata_I[20];
+                imm[19:12] =  mem_rdata_I[19:12];
+                imm[11] = mem_rdata_I[20];
+                imm[10:1]  = mem_rdata_I[30:21];
+                imm[0]  = 1'b0;
+                imm[31:21] = {12{imm[20]}};
+            end
+            default: imm[31:0] = {32{1'b0}};
+        endcase
     end
     //----------------------------------------// Changed to reg!!
 
@@ -136,14 +134,15 @@ module CHIP(
     // 
     //----------------------------------------------------------------//
     //maybe after exe?
-    always @(*) begin // Instruction fetch
+    /*
+    always @(*) begin // Instruction Fetch
         case(type)
             I: begin
                 if (func == 3'b000) PC_nxt = rs1_data + imm;   // jalr
                 else                PC_nxt = PC + 3'b100;
             end
             B: begin
-                if (alu_out == 0) PC_nxt = PC + imm; // shift left is done by EX ??
+                if (alu_out == 0) PC_nxt = PC + imm; // shift left is done by ID ??
                 else              PC_nxt = PC + 3'b100;
             end
             J: begin
@@ -152,9 +151,10 @@ module CHIP(
             default: PC_nxt = PC + 3'b100;
         endcase
     end
+    */
     //----------------------------------------------------------------//
 
-    always @(*) begin // Instruction decode
+    always @(*) begin // Instruction Decode
         case(mem_rdata_I[6:0])
             7'b01101111:begin
                 type = U;   // U-type
@@ -188,8 +188,6 @@ module CHIP(
                         func = 3'b011;   // BGE
                     end
                 endcase
-                rs1 = mem_rdata_I[19:15];
-                rs2 = mem_rdata_I[24:20];
             end
             7'b0000011:begin
                 type = I;   // I-type
@@ -226,139 +224,9 @@ module CHIP(
             end
         endcase
     end
-    //---------------------------------------------------//
-    // will use module reg_file
-    /*always @(*) begin  // Execution
-        case(type)
-            R:begin        //R-type
-                case(func)
-                    3'b000:begin    //ADD
-                        alu_out = q1 + q2;
-                        ctrl = 0;
-                    end
-                    3'b001:begin    //SUB
-                        alu_out = q1 - q2;
-                        ctrl = 0;
-                    end
-                    3'b010:begin    //MUL
-                        //Wait!!
-                    end
-                endcase
-            end
-            I:begin        //I-type
-                case(func)
-                    3'b001:begin    //LW
-                        alu_out = q1 + imm;
-                        ctrl = 0;
-                    end
-                    3'b010:begin    //ADDI
-                        alu_out = q1 + imm;
-                        ctrl = 0;
-                    end
-                    3'b011:begin    //SLTI
-                        
-                    end
-                endcase
-            end
-            S:begin        //S-type
-                case(func)
-                    3'b000:begin    //SW
-                        alu_out = q1 + imm;
-                        ctrl = 1;
-                    end
-                endcase
-            end
-            B:begin        //B-type
-                case(func)
-                    3'b000:begin    //BEQ
-                        check_branch = (q1==q2) ?1 :0;
-                        ctrl = 0;
-                    end
-                    3'b001:begin    //BNE
-                        check_branch = (q1!=q2) ?1 :0;
-                        ctrl = 0;
-                    end
-                    3'b010:begin    //BLT
-                        check_branch = (q1<q2) ?1 :0;
-                        ctrl = 0;
-                    end
-                    3'b011:begin    //BGE
-                        check_branch = (q1>=q2) ?1 :0;
-                        ctrl = 0;
-                    end
-                endcase
-            end
-            U:begin        //U-type
-                case(func)
-                    3'b000:begin    //LUI
-                        alu_out = imm;
-                        ctrl = 0;
-                    end
-                    3'b001:begin    //AUIPC
-                        alu_out = PC + imm;
-                        ctrl = 0;
-                    end
-                endcase
-            end
-            J:begin        //J-type
-                case(func)
-                    3'b000:begin    //JAL
-                        
-                    end
-                endcase
-            end
-        endcase
-    end
 
-    always @(*) begin // Memory access
-        case(type)
-            I:begin        //I-type
-                case(func)
-                    3'b000:begin    //JALR
-                        
-                    end
-                    3'b001:begin    //LW
-                        
-                    end
-                    3'b010:begin    //ADDI
-                        
-                    end
-                    3'b011:begin    //SLTI
-                        
-                    end
-                endcase
-            end
-            S:begin        //S-type
-                case(func)
-                    3'b000:begin    //SW
-                        
-                    end
-                endcase
-            end
-            U:begin        //U-type
-                case(func)
-                    3'b000:begin    //LUI
-                        
-                    end
-                    3'b001:begin    //AUIPC
-                        
-                    end
-                endcase
-            end
-            J:begin        //J-type
-                case(func)
-                    3'b000:begin    //JAL
-                        
-                    end
-                endcase
-            end
-        endcase
-    end
-
-    always @(*) begin // Write back 
-        
-    end*/
     //---------------------------------------------------//
+    // Subsequent Actions after Instrunction Decode ?
     always @(*) begin
         case(type)
             R:begin        //R-type
@@ -381,14 +249,14 @@ module CHIP(
             I:begin        //I-type
                 case(func)
                     3'b000:begin    //JALR
-                        ctrl = 0;
                         write_rd = PC + 4;
+                        ctrl = 0;
                         PC_nxt = q1 + imm;
                     end
                     3'b001:begin    //LW
                         alu_out = q1 + imm;
-                        ctrl = 0;
                         write_rd = mem_rdata_D;
+                        ctrl = 0;
                         PC_nxt = PC + 4;
                     end
                     3'b010:begin    //ADDI
@@ -415,22 +283,22 @@ module CHIP(
             B:begin        //B-type
                 case(func)
                     3'b000:begin    //BEQ
-                        check_branch = (q1==q2) ?1 :0;
+                        check_branch = (q1==q2) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b001:begin    //BNE
-                        check_branch = (q1!=q2) ?1 :0;
+                        check_branch = (q1!=q2) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b010:begin    //BLT
-                        check_branch = (q1<q2) ?1 :0;
+                        check_branch = (q1<q2) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b011:begin    //BGE
-                        check_branch = (q1>=q2) ?1 :0;
+                        check_branch = (q1>=q2) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
@@ -453,8 +321,8 @@ module CHIP(
             J:begin        //J-type
                 case(func)
                     3'b000:begin    //JAL
-                        ctrl = 0;
                         write_rd = PC + 4;
+                        ctrl = 0;
                         PC_nxt = PC + imm;
                     end
                 endcase
@@ -470,8 +338,6 @@ module CHIP(
         end
         else begin
             PC <= PC_nxt;
-            type <= type_nxt;
-            func <= func_nxt;
         end 
     end
 endmodule
