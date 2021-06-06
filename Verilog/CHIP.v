@@ -43,10 +43,11 @@ module CHIP(
     reg   [31:0] alu_out       ;
     reg   check_branch         ; 
     reg   [31:0] write_rd      ;
+    reg   write                ;
     reg   ctrl                 ; // for mem_wen_D
     reg   valid                ; // for mul_valid
-    wire   ready                ; // for mul_ready
-    wire   [63:0] out           ; // for mul_out
+    wire   ready               ; // for mul_ready
+    wire   [63:0] out          ; // for mul_out
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -101,10 +102,10 @@ module CHIP(
     assign  mem_wen_D  = ctrl;
     assign  mem_addr_D = alu_out;
     assign  mem_wdata_D = rs2_data;
-    assign  mem_addr_I = PC_nxt;
+    assign  mem_addr_I = PC;
     // input internal wires for reg0
     // assign 這邊的條件語法好像有錯，在幫我改一下 謝謝！
-    assign  regWrite = (type == I && func == 3'b001) ? 1 : 0;  // Load
+    assign  regWrite = write;  // Load
     assign  rs1 = (type == U || type == J) ? 0 : mem_rdata_I[19:15];
     assign  rs2 = (type == R || type == S || type == B) ? mem_rdata_I[24:20] : 0;
     assign  rd  = (type == S || type == B) ? 0 : mem_rdata_I[11:7];
@@ -127,7 +128,7 @@ module CHIP(
                 imm[10:5]  = mem_rdata_I[30:25];
                 imm[4:1]   = mem_rdata_I[11:8];
                 imm[0]  = 1'b0;
-                imm[31:13] = {19{imm[11]}};
+                imm[31:13] = {19{imm[12]}};
             end
             U:begin
                 imm[31:12] = mem_rdata_I[31:12];
@@ -252,11 +253,13 @@ module CHIP(
                     3'b000:begin    //ADD
                         write_rd = rs1_data + rs2_data;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                     3'b001:begin    //SUB
                         write_rd = rs1_data - rs2_data;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                     3'b010:begin    //MUL
@@ -266,6 +269,7 @@ module CHIP(
                             write_rd = out[31:0];
                             PC_nxt = PC + 4;
                             ctrl = 0;
+                            write = 1;
                             valid = 1'b0;
                         end
                         else begin
@@ -281,22 +285,26 @@ module CHIP(
                     3'b000:begin    //JALR
                         write_rd = PC + 4;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = rs1_data + imm;
                     end
                     3'b001:begin    //LW
                         alu_out = rs1_data + imm;
                         write_rd = mem_rdata_D;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                     3'b010:begin    //ADDI
                         write_rd = rs1_data + imm;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                     3'b011:begin    //SLTI
                         write_rd = (rs1_data<imm) ? 1 : 0;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                 endcase
@@ -306,6 +314,7 @@ module CHIP(
                     3'b000:begin    //SW
                         alu_out = rs1_data + imm;
                         ctrl = 1;
+                        write = 0;
                         PC_nxt = PC + 4;
                     end
                 endcase
@@ -315,21 +324,25 @@ module CHIP(
                     3'b000:begin    //BEQ
                         check_branch = (rs1_data==rs2_data) ? 1 :0;
                         ctrl = 0;
+                        write = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b001:begin    //BNE
                         check_branch = (rs1_data!=rs2_data) ? 1 :0;
                         ctrl = 0;
+                        write = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b010:begin    //BLT
                         check_branch = (rs1_data<rs2_data) ? 1 :0;
                         ctrl = 0;
+                        write = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b011:begin    //BGE
                         check_branch = (rs1_data>=rs2_data) ? 1 :0;
                         ctrl = 0;
+                        write = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                 endcase
@@ -339,11 +352,13 @@ module CHIP(
                     3'b000:begin    //LUI
                         write_rd = imm;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                     3'b001:begin    //AUIPC
                         write_rd = PC + imm;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + 4;
                     end
                 endcase
@@ -353,6 +368,7 @@ module CHIP(
                     3'b000:begin    //JAL
                         write_rd = PC + 4;
                         ctrl = 0;
+                        write = 1;
                         PC_nxt = PC + imm;
                     end
                 endcase
@@ -369,6 +385,15 @@ module CHIP(
         else begin
             PC <= PC_nxt;
         end 
+        $display("============================================================");
+        $display("PC:%b", PC);
+        $display("Instruction:%b", mem_rdata_I);
+        $display("RD:", rd, ", Data:%b", rd_data);
+        $display("RS1:", rs1, ", Data:%b", rs1_data);
+        $display("RS2:", rs2, ", Data:%b", rs2_data);
+        $display("Imm:%b", imm);
+        $display("type:", type, ", func:", func);
+        $display("============================================================\n");
     end
 endmodule
 
