@@ -337,12 +337,12 @@ module CHIP(
             U:begin        //U-type
                 case(func)
                     3'b000:begin    //LUI
-                        alu_out = imm;
+                        write_rd = imm;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
                     3'b001:begin    //AUIPC
-                        alu_out = PC + imm;
+                        write_rd = PC + imm;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
