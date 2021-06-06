@@ -90,7 +90,7 @@ module CHIP(
         .rst_n(rst_n),
         .valid(valid),
         .ready(ready),
-        .mode(),
+        .mode(1'b0),
         .in_A(rs1),
         .in_B(rs2),
         .out(out));
@@ -104,12 +104,11 @@ module CHIP(
     assign  mem_addr_I = PC_nxt;
     // input internal wires for reg0
     // assign 這邊的條件語法好像有錯，在幫我改一下 謝謝！
-    assign  regWrite = (type == I and func == 3'b001) ? 1 : 0;  // Load
-    assign  rs1 = (type == U or type == J) ? 0 : mem_rdata_I[19:15];
-    assign  rs2 = (type == R or type == S or type == B) ? mem_rdata_I[24:20] : 0;
-    assign  rd  = (type == S or type == B) ? 0 : mem_rdata_I[11:7];
-    assign  rd_data = write_rd;  
-
+    assign  regWrite = (type == I && func == 3'b001) ? 1 : 0;  // Load
+    assign  rs1 = (type == U || type == J) ? 0 : mem_rdata_I[19:15];
+    assign  rs2 = (type == R || type == S || type == B) ? mem_rdata_I[24:20] : 0;
+    assign  rd  = (type == S || type == B) ? 0 : mem_rdata_I[11:7];
+    assign  rd_data = (type == S || type == B) ? 0 : write_rd;  
 
     always @(*) begin
         case(type)
@@ -264,7 +263,7 @@ module CHIP(
                         //Wait!!
                         valid = 1'b1;
                         if(ready) begin
-                            write_rd = out;
+                            write_rd = out[31:0];
                             PC_nxt = PC + 4;
                             ctrl = 0;
                             valid = 1'b0;
