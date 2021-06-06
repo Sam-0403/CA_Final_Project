@@ -45,8 +45,8 @@ module CHIP(
     reg   [31:0] write_rd      ;
     reg   ctrl                 ; // for mem_wen_D
     reg   valid                ; // for mul_valid
-    reg   ready                ; // for mul_ready
-    reg   out                  ; // for mul_out
+    wire   ready                ; // for mul_ready
+    wire   [63:0] out           ; // for mul_out
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -91,8 +91,8 @@ module CHIP(
         .valid(valid),
         .ready(ready),
         .mode(1'b0),
-        .in_A(rs1),
-        .in_B(rs2),
+        .in_A(rs1_data),
+        .in_B(rs2_data),
         .out(out));
     //---------------------------------------//
     // Todo: any combinational/sequential circuit
@@ -100,7 +100,7 @@ module CHIP(
     // output
     assign  mem_wen_D  = ctrl;
     assign  mem_addr_D = alu_out;
-    assign  mem_wdata_D = q2;
+    assign  mem_wdata_D = rs2_data;
     assign  mem_addr_I = PC_nxt;
     // input internal wires for reg0
     // assign 這邊的條件語法好像有錯，在幫我改一下 謝謝！
@@ -250,12 +250,12 @@ module CHIP(
             R:begin        //R-type
                 case(func)
                     3'b000:begin    //ADD
-                        write_rd = q1 + q2;
+                        write_rd = rs1_data + rs2_data;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
                     3'b001:begin    //SUB
-                        write_rd = q1 - q2;
+                        write_rd = rs1_data - rs2_data;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
@@ -281,21 +281,21 @@ module CHIP(
                     3'b000:begin    //JALR
                         write_rd = PC + 4;
                         ctrl = 0;
-                        PC_nxt = q1 + imm;
+                        PC_nxt = rs1_data + imm;
                     end
                     3'b001:begin    //LW
-                        alu_out = q1 + imm;
+                        alu_out = rs1_data + imm;
                         write_rd = mem_rdata_D;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
                     3'b010:begin    //ADDI
-                        write_rd = q1 + imm;
+                        write_rd = rs1_data + imm;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
                     3'b011:begin    //SLTI
-                        write_rd = (q1<imm) ? 1 : 0;
+                        write_rd = (rs1_data<imm) ? 1 : 0;
                         ctrl = 0;
                         PC_nxt = PC + 4;
                     end
@@ -304,7 +304,7 @@ module CHIP(
             S:begin        //S-type
                 case(func)
                     3'b000:begin    //SW
-                        alu_out = q1 + imm;
+                        alu_out = rs1_data + imm;
                         ctrl = 1;
                         PC_nxt = PC + 4;
                     end
@@ -313,22 +313,22 @@ module CHIP(
             B:begin        //B-type
                 case(func)
                     3'b000:begin    //BEQ
-                        check_branch = (q1==q2) ? 1 :0;
+                        check_branch = (rs1_data==rs2_data) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b001:begin    //BNE
-                        check_branch = (q1!=q2) ? 1 :0;
+                        check_branch = (rs1_data!=rs2_data) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b010:begin    //BLT
-                        check_branch = (q1<q2) ? 1 :0;
+                        check_branch = (rs1_data<rs2_data) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
                     3'b011:begin    //BGE
-                        check_branch = (q1>=q2) ? 1 :0;
+                        check_branch = (rs1_data>=rs2_data) ? 1 :0;
                         ctrl = 0;
                         PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
                     end
