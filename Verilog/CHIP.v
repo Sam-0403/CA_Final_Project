@@ -44,6 +44,9 @@ module CHIP(
     reg   check_branch         ; 
     reg   [31:0] write_rd      ;
     reg   ctrl                 ; // for mem_wen_D
+    reg   valid                ; // for mul_valid
+    reg   ready                ; // for mul_ready
+    reg   out                  ; // for mul_out
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -81,6 +84,17 @@ module CHIP(
         .q2(rs2_data));                      //
     //---------------------------------------//
     
+    //---------------------------------------//
+    mulDiv mul0(
+        .clk(clk),
+        .rst_n(rst_n),
+        .valid(valid),
+        .ready(ready),
+        .mode(),
+        .in_A(rs1),
+        .in_B(rs2),
+        .out(out));
+    //---------------------------------------//
     // Todo: any combinational/sequential circuit
     // Wire assignments
     // output
@@ -231,6 +245,7 @@ module CHIP(
 
     //---------------------------------------------------//
     // Subsequent Actions after Instrunction Decode ?
+    // OK!!
     always @(*) begin
         case(type)
             R:begin        //R-type
@@ -247,6 +262,18 @@ module CHIP(
                     end
                     3'b010:begin    //MUL
                         //Wait!!
+                        valid = 1'b1;
+                        if(ready) begin
+                            write_rd = out;
+                            PC_nxt = PC + 4;
+                            ctrl = 0;
+                            valid = 1'b0;
+                        end
+                        else begin
+                            ctrl = 0;
+                            PC_nxt = PC;
+                        end
+                        
                     end
                 endcase
             end
