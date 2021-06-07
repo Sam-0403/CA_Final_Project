@@ -45,7 +45,7 @@ module CHIP(
     reg   [31:0] write_rd      ;
     reg   write                ;
     reg   ctrl                 ; // for mem_wen_D
-    reg   valid                ; // for mul_valid
+    wire   valid                ; // for mul_valid
     wire  ready                ; // for mul_ready
     wire  [63:0] out           ; // for mul_out
 
@@ -65,8 +65,8 @@ module CHIP(
     //1:SUB    LW            BNE    AUIPC
     //2:MUL    ADDI          BLT
     //3:       SLTI          BGE
-    //4:
-    //5:
+    //4:       SLLI
+    //5:       SRLI
     //6:
     //7:
     //--------------------------------------------//
@@ -110,6 +110,7 @@ module CHIP(
     assign  rs2 = (type == R || type == S || type == B) ? mem_rdata_I[24:20] : 0;
     assign  rd  = (type == S || type == B) ? 0 : mem_rdata_I[11:7];
     assign  rd_data = (type == S || type == B || rd == 0) ? 0 : write_rd;
+    assign  valid = (type == R && func == 3'b010) ? 1 : 0;
 
     always @(*) begin
         case(type)
@@ -224,6 +225,12 @@ module CHIP(
                     3'b010:begin
                         func = 3'b011;   // SLTI
                     end
+                    3'b001:begin
+                        func = 3'b100;   // SLLI
+                    end
+                    3'b101:begin
+                        func = 3'b101;   // SRLI
+                    end
                 endcase
             end
             7'b0110011:begin
@@ -264,13 +271,11 @@ module CHIP(
                     end
                     3'b010:begin    //MUL
                         //Wait!!
-                        valid = 1'b1;
                         if(ready) begin
                             write_rd = out[31:0];
                             ctrl = 0;
                             write = 1;
                             PC_nxt = PC + 4;
-                            valid = 1'b0;
                         end
                         else begin
                             ctrl = 0;
@@ -303,6 +308,18 @@ module CHIP(
                     end
                     3'b011:begin    //SLTI
                         write_rd = (rs1_data<imm) ? 1 : 0;
+                        ctrl = 0;
+                        write = 1;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b100:begin    //SLLI
+                        write_rd = rs1_data <<< imm[4:0];
+                        ctrl = 0;
+                        write = 1;
+                        PC_nxt = PC + 4;
+                    end
+                    3'b101:begin    //SRLI
+                        write_rd = rs1_data >>> imm[4:0];
                         ctrl = 0;
                         write = 1;
                         PC_nxt = PC + 4;
@@ -385,7 +402,7 @@ module CHIP(
         else begin
             PC <= PC_nxt;
         end 
-        $display("============================================================");
+        /*$display("============================================================");
         $display("PC:%H", PC);
         $display("Instruction:%H", mem_rdata_I);
         $display("RD :", rd, ", Data:%H", rd_data);
@@ -394,7 +411,7 @@ module CHIP(
         $display("Imm:%H", imm);
         $display("ready:%b", ready);
         $display("type:", type, ", func:", func);
-        $display("============================================================\n");
+        $display("============================================================\n");*/
     end
 endmodule
 
