@@ -135,12 +135,12 @@ module CHIP(
                 imm[11:0]  = {12{1'b0}};
             end
             J:begin
-                imm[20] = mem_rdata_I[20];
+                imm[20] = mem_rdata_I[31];
                 imm[19:12] =  mem_rdata_I[19:12];
                 imm[11] = mem_rdata_I[20];
                 imm[10:1]  = mem_rdata_I[30:21];
                 imm[0]  = 1'b0;
-                imm[31:21] = {12{imm[20]}};
+                imm[31:21] = {11{imm[20]}};
             end
             default: imm[31:0] = {32{1'b0}};
         endcase
@@ -174,7 +174,7 @@ module CHIP(
 
     always @(*) begin // Instruction Decode
         case(mem_rdata_I[6:0])
-            7'b01101111:begin
+            7'b0110111:begin
                 type = U;   // U-type
                 func = 3'b000;   // LUI
             end
@@ -386,12 +386,12 @@ module CHIP(
             PC <= PC_nxt;
         end 
         $display("============================================================");
-        $display("PC:%b", PC);
-        $display("Instruction:%b", mem_rdata_I);
-        $display("RD:", rd, ", Data:%b", rd_data);
+        $display("PC:%H", PC);
+        $display("Instruction:%H", mem_rdata_I);
+        $display("RD :", rd, ", Data:%b", rd_data);
         $display("RS1:", rs1, ", Data:%b", rs1_data);
         $display("RS2:", rs2, ", Data:%b", rs2_data);
-        $display("Imm:%b", imm);
+        $display("Imm:%H", imm);
         $display("type:", type, ", func:", func);
         $display("============================================================\n");
     end
