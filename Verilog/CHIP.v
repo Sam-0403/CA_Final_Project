@@ -46,8 +46,8 @@ module CHIP(
     reg   write                ;
     reg   ctrl                 ; // for mem_wen_D
     reg   valid                ; // for mul_valid
-    wire   ready               ; // for mul_ready
-    wire   [63:0] out          ; // for mul_out
+    wire  ready                ; // for mul_ready
+    wire  [63:0] out           ; // for mul_out
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -109,7 +109,7 @@ module CHIP(
     assign  rs1 = (type == U || type == J) ? 0 : mem_rdata_I[19:15];
     assign  rs2 = (type == R || type == S || type == B) ? mem_rdata_I[24:20] : 0;
     assign  rd  = (type == S || type == B) ? 0 : mem_rdata_I[11:7];
-    assign  rd_data = (type == S || type == B) ? 0 : write_rd;  
+    assign  rd_data = (type == S || type == B || rd == 0) ? 0 : write_rd;
 
     always @(*) begin
         case(type)
@@ -227,7 +227,7 @@ module CHIP(
                 endcase
             end
             7'b0110011:begin
-                type = I;   // I-type
+                type = R;   // R-type
                 case(mem_rdata_I[31:25])
                     7'b0000000:begin
                         func = 3'b000;   // ADD
@@ -267,16 +267,16 @@ module CHIP(
                         valid = 1'b1;
                         if(ready) begin
                             write_rd = out[31:0];
-                            PC_nxt = PC + 4;
                             ctrl = 0;
                             write = 1;
+                            PC_nxt = PC + 4;
                             valid = 1'b0;
                         end
                         else begin
                             ctrl = 0;
+                            write = 0;
                             PC_nxt = PC;
                         end
-                        
                     end
                 endcase
             end
@@ -388,10 +388,11 @@ module CHIP(
         $display("============================================================");
         $display("PC:%H", PC);
         $display("Instruction:%H", mem_rdata_I);
-        $display("RD :", rd, ", Data:%b", rd_data);
-        $display("RS1:", rs1, ", Data:%b", rs1_data);
-        $display("RS2:", rs2, ", Data:%b", rs2_data);
+        $display("RD :", rd, ", Data:%H", rd_data);
+        $display("RS1:", rs1, ", Data:%H", rs1_data);
+        $display("RS2:", rs2, ", Data:%H", rs2_data);
         $display("Imm:%H", imm);
+        $display("ready:%b", ready);
         $display("type:", type, ", func:", func);
         $display("============================================================\n");
     end
