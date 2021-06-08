@@ -119,7 +119,7 @@ module CHIP(
     assign  rs2 = addr_I[14:10];
     assign  rd  = addr_I[4:0];
     assign  rd_data = (write && rd != 0) ? write_rd : 0;
-    assign  valid = (type == R && func == 3'b010) ? 1'b1 : 1'b0; 
+    assign  valid = (type == R && func == 3'b010 && state == EX) ? 1'b1 : 1'b0; 
 
     //-------------------------------------------------//
     // 3 cycles for states
@@ -129,8 +129,7 @@ module CHIP(
                 state_nxt = EX;
             end
             EX : begin
-                state_nxt = (type == I && func == 3'b001) ? MW : 
-                                   (type == R && func == 3'b010 && !ready) ? EX : ID;
+                state_nxt = ((type == I && func == 3'b001)||(type == S && func == 3'b000)) ? MW : ((type == R && func == 3'b010 && !ready) ? EX : ID);
             end
             MW : begin
                 state_nxt = ID;
@@ -191,7 +190,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = 5'b0;
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         func_nxt = 3'b000;   // LUI
                     end
                     7'b0010111:begin
@@ -199,7 +198,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = 5'b0;
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         func_nxt = 3'b001;   // AUIPC
                     end
                     7'b1101111:begin
@@ -207,7 +206,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = 5'b0;
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         func_nxt = 3'b000;   // JAL
                     end
                     7'b1100111:begin
@@ -215,7 +214,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = mem_rdata_I[19:15];
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         func_nxt = 3'b000;   // JALR
                     end
                     7'b1100011:begin
@@ -223,7 +222,7 @@ module CHIP(
                         addr_I_nxt[4:0] = 5'b0;
                         addr_I_nxt[9:5] = mem_rdata_I[19:15];
                         addr_I_nxt[14:10] = mem_rdata_I[24:20];
-                        write_nxt = 0;
+                        //write_nxt = 0;
                         case(mem_rdata_I[14:12])
                             3'b000:begin
                                 func_nxt = 3'b000;   // BEQ
@@ -245,7 +244,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = mem_rdata_I[19:15];
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         func_nxt = 3'b001;   // LW
                     end
                     7'b0100011:begin
@@ -253,7 +252,7 @@ module CHIP(
                         addr_I_nxt[4:0] = 5'b0;
                         addr_I_nxt[9:5] = mem_rdata_I[19:15];
                         addr_I_nxt[14:10] = mem_rdata_I[24:20];
-                        write_nxt = 0;
+                        //write_nxt = 0;
                         func_nxt = 3'b000;   // SW
                     end
                     7'b0010011:begin
@@ -261,7 +260,7 @@ module CHIP(
                         addr_I_nxt[4:0] = mem_rdata_I[11:7];
                         addr_I_nxt[9:5] = mem_rdata_I[19:15];
                         addr_I_nxt[14:10] = 5'b0;
-                        write_nxt = 1;
+                        //write_nxt = 1;
                         case(mem_rdata_I[14:12])
                             3'b000:begin
                                 func_nxt = 3'b010;   // ADDI
@@ -286,19 +285,19 @@ module CHIP(
                         case(mem_rdata_I[31:25])
                             7'b0000000:begin
                                 func_nxt = 3'b000;   // ADD
-                                write_nxt = 1;
+                                //write_nxt = 1;
                             end
                             7'b0100000:begin
                                 func_nxt = 3'b001;   // SUB
-                                write_nxt = 1;
+                                //write_nxt = 1;
                             end
                             7'b0000001:begin
                                 func_nxt = 3'b010;   // MUL
-                                write_nxt = ready;
+                                //write_nxt = ready;
                             end
                             default:begin
                                 func_nxt = func;
-                                write_nxt = write;
+                                //write_nxt = write;
                             end
                         endcase
                     end
@@ -306,7 +305,7 @@ module CHIP(
                         type_nxt = type;
                         func_nxt = func;
                         addr_I_nxt = addr_I;
-                        write_nxt = write;
+                        //write_nxt = write;
                     end
                 endcase
             end
@@ -314,7 +313,7 @@ module CHIP(
                 type_nxt = type;
                 func_nxt = func;
                 addr_I_nxt = addr_I;
-                write_nxt = write;
+                //write_nxt = write;
             end
         endcase
     end
@@ -335,12 +334,14 @@ module CHIP(
                                 write_rd_nxt = rs1_data + rs2_data;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b001:begin    //SUB
                                 alu_out_nxt = 0;
                                 write_rd_nxt = rs1_data - rs2_data;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b010:begin    //MUL
                                 //Wait!!
@@ -349,12 +350,14 @@ module CHIP(
                                     write_rd_nxt = out[31:0];
                                     ctrl_nxt = 0;
                                     PC_nxt = PC + 4;
+                                    write_nxt = 1;
                                 end
                                 else begin
                                     alu_out_nxt = 0;
                                     write_rd_nxt = write_rd;
                                     ctrl_nxt = 0;
                                     PC_nxt = PC;
+                                    write_nxt = 0;
                                 end
                             end
                             default:begin
@@ -362,6 +365,7 @@ module CHIP(
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -372,42 +376,49 @@ module CHIP(
                                 write_rd_nxt = PC + 4;
                                 ctrl_nxt = 0;
                                 PC_nxt = rs1_data + imm;
+                                write_nxt = 1;
                             end
                             3'b001:begin    //LW have some problem
                                 alu_out_nxt = rs1_data + imm;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = 0;
                             end
                             3'b010:begin    //ADDI
                                 alu_out_nxt = 0;
                                 write_rd_nxt = rs1_data + imm;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b011:begin    //SLTI
                                 alu_out_nxt = 0;
                                 write_rd_nxt = (rs1_data<imm) ? 1'b1 : 1'b0;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b100:begin    //SLLI
                                 alu_out_nxt = 0;
                                 write_rd_nxt = rs1_data <<< imm[4:0];
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b101:begin    //SRLI
                                 alu_out_nxt = 0;
                                 write_rd_nxt = rs1_data >>> imm[4:0];
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             default:begin
                                 alu_out_nxt = alu_out;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -417,13 +428,15 @@ module CHIP(
                                 alu_out_nxt = rs1_data + imm;
                                 write_rd_nxt = 0;
                                 ctrl_nxt = 1;
-                                PC_nxt = PC + 4;
+                                PC_nxt = PC;
+                                write_nxt = 0;
                             end
                             default:begin
                                 alu_out_nxt = alu_out;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -435,6 +448,7 @@ module CHIP(
                                 write_rd_nxt = 0;
                                 ctrl_nxt = 0;
                                 PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                                write_nxt = 0;
                             end
                             3'b001:begin    //BNE
                                 check_branch = (rs1_data!=rs2_data) ? 1'b1 : 1'b0;
@@ -442,6 +456,7 @@ module CHIP(
                                 write_rd_nxt = 0;
                                 ctrl_nxt = 0;
                                 PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                                write_nxt = 0;
                             end
                             3'b010:begin    //BLT
                                 check_branch = (rs1_data<rs2_data) ? 1'b1 : 1'b0;
@@ -449,6 +464,7 @@ module CHIP(
                                 write_rd_nxt = 0;
                                 ctrl_nxt = 0;
                                 PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                                write_nxt = 0;
                             end
                             3'b011:begin    //BGE
                                 check_branch = (rs1_data>=rs2_data) ? 1'b1 : 1'b0;
@@ -456,12 +472,14 @@ module CHIP(
                                 write_rd_nxt = 0;
                                 ctrl_nxt = 0;
                                 PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                                write_nxt = 0;
                             end
                             default:begin
                                 alu_out_nxt = alu_out;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -472,18 +490,21 @@ module CHIP(
                                 write_rd_nxt = imm;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             3'b001:begin    //AUIPC
                                 alu_out_nxt = 0;
                                 write_rd_nxt = PC + imm;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + 4;
+                                write_nxt = 1;
                             end
                             default:begin
                                 alu_out_nxt = alu_out;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -494,12 +515,14 @@ module CHIP(
                                 write_rd_nxt = PC + 4;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC + imm;
+                                write_nxt = 1;
                             end
                             default:begin
                                 alu_out_nxt = alu_out;
                                 write_rd_nxt = write_rd;
                                 ctrl_nxt = 0;
                                 PC_nxt = PC;
+                                write_nxt = write;
                             end
                         endcase
                     end
@@ -508,6 +531,7 @@ module CHIP(
                         write_rd_nxt = write_rd;
                         ctrl_nxt = 0;
                         PC_nxt = PC;
+                        write_nxt = write;
                     end
                 endcase
             end
@@ -516,12 +540,14 @@ module CHIP(
                 ctrl_nxt = ctrl;
                 alu_out_nxt = alu_out;
                 PC_nxt = PC + 4;
+                write_nxt = (type == I && func == 3'b001) ? 1 : 0;
             end
             default:begin
                 alu_out_nxt = alu_out;
                 write_rd_nxt = write_rd;
                 ctrl_nxt = 0;
                 PC_nxt = PC;
+                write_nxt = 0;
             end
         endcase
     end
@@ -549,6 +575,7 @@ module CHIP(
             ctrl <= ctrl_nxt;
             addr_I <= addr_I_nxt;
         end 
+        /*
         $display("============================================================");
         $display("PC:%H", PC);
         $display("Instruction:%H", mem_rdata_I);
@@ -559,6 +586,7 @@ module CHIP(
         $display("ready:%b", ready);
         $display("state:", state, ", type:", type, ", func:", func);
         $display("============================================================\n");
+        */
     end
 endmodule
 
