@@ -1,8 +1,8 @@
 .data
-    a: .word 1
-    b: .word 9
-    c: .word 2
-    d: .word 2
+    a: .word 0
+    b: .word 6
+    c: .word 1
+    d: .word 5
 .text
 .globl __start
 

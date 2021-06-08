@@ -35,19 +35,28 @@ module CHIP(
     //---------------------------------------//
 
     // Todo: other wire/reg
-    //reg   [31:0] PC_nxt        ; // may conflict with wire PC_nxt ?? //or use wire only?? we can just assign it
+    reg   [1:0]state, state_nxt;
     reg   [2:0]  type, type_nxt; // if necessary ?(maybe not nxt)
-    reg   [2:0]  func, func_nxt; // (maybe not nxt
-    /*wire  [31:0] imm         ;*/
+    reg   [2:0]  func, func_nxt; 
     reg   [31:0] imm           ;
     reg   [31:0] alu_out       ;
-    reg   check_branch         ; 
+    reg   [31:0] alu_out_nxt   ;
+    reg   check_branch         ;
     reg   [31:0] write_rd      ;
-    reg   write                ;
-    reg   ctrl                 ; // for mem_wen_D
-    wire   valid                ; // for mul_valid
+    reg   [31:0] write_rd_nxt  ;
+    reg   write, write_nxt     ;
+    reg   ctrl, ctrl_nxt       ; // for mem_wen_D
+    reg   [14:0] addr_I        ;
+    reg   [14:0] addr_I_nxt    ;
+    wire  valid                ; // for mul_valid
     wire  ready                ; // for mul_ready
     wire  [63:0] out           ; // for mul_out
+
+
+    // Definition of state
+    parameter ID = 2'b00;
+    parameter EX = 2'b01;
+    parameter MW = 2'b10;  // MEM & WB
 
     // Definition of type
     // R:0, I:1, S:2, B:3, U:4, J:5
@@ -106,146 +115,206 @@ module CHIP(
     // input internal wires for reg0
     // assign 這邊的條件語法好像有錯，在幫我改一下 謝謝！
     assign  regWrite = write;  // Load
-    assign  rs1 = (type == U || type == J) ? 0 : mem_rdata_I[19:15];
-    assign  rs2 = (type == R || type == S || type == B) ? mem_rdata_I[24:20] : 0;
-    assign  rd  = (type == S || type == B) ? 0 : mem_rdata_I[11:7];
-    assign  rd_data = (type == S || type == B || rd == 0) ? 0 : write_rd;
-    assign  valid = (type == R && func == 3'b010) ? 1 : 0;
+    assign  rs1 = addr_I[9:5];
+    assign  rs2 = addr_I[14:10];
+    assign  rd  = addr_I[4:0];
+    assign  rd_data = (write && rd != 0) ? write_rd : 0;
+    assign  valid = (type == R && func == 3'b010) ? 1'b1 : 1'b0; 
 
+    //-------------------------------------------------//
+    // 3 cycles for states
     always @(*) begin
-        case(type)
-            I:begin
-                imm[11:0]  = mem_rdata_I[31:20];
-                imm[31:12] = {20{imm[11]}};
+        case(state)
+            ID : begin
+                state_nxt = EX;
             end
-            S:begin
-                imm[11:5]  = mem_rdata_I[31:25];
-                imm[4:0]   = mem_rdata_I[11:7];
-                imm[31:12] = {20{imm[11]}};
+            EX : begin
+                state_nxt = (type == I && func == 3'b001) ? MW : 
+                                   (type == R && func == 3'b010 && !ready) ? EX : ID;
             end
-            B:begin
-                imm[12] = mem_rdata_I[31];
-                imm[11] = mem_rdata_I[7];
-                imm[10:5]  = mem_rdata_I[30:25];
-                imm[4:1]   = mem_rdata_I[11:8];
-                imm[0]  = 1'b0;
-                imm[31:13] = {19{imm[12]}};
+            MW : begin
+                state_nxt = ID;
             end
-            U:begin
-                imm[31:12] = mem_rdata_I[31:12];
-                imm[11:0]  = {12{1'b0}};
-            end
-            J:begin
-                imm[20] = mem_rdata_I[31];
-                imm[19:12] =  mem_rdata_I[19:12];
-                imm[11] = mem_rdata_I[20];
-                imm[10:1]  = mem_rdata_I[30:21];
-                imm[0]  = 1'b0;
-                imm[31:21] = {11{imm[20]}};
-            end
-            default: imm[31:0] = {32{1'b0}};
+            default : state_nxt = ID;
         endcase
     end
-    //----------------------------------------// Changed to reg!!
 
-
-    // flush control haven't added yet
-    // 
-    //----------------------------------------------------------------//
-    //maybe after exe?
-    /*
-    always @(*) begin // Instruction Fetch
-        case(type)
-            I: begin
-                if (func == 3'b000) PC_nxt = rs1_data + imm;   // jalr
-                else                PC_nxt = PC + 3'b100;
+    always @(*) begin  // imm
+        case(state)
+            EX: begin
+                case(type)
+                    R:begin
+                        imm[31:0] = {32{1'b0}};
+                    end
+                    I:begin
+                        imm[11:0]  = mem_rdata_I[31:20];
+                        imm[31:12] = {20{imm[11]}};
+                    end
+                    S:begin
+                        imm[11:5]  = mem_rdata_I[31:25];
+                        imm[4:0]   = mem_rdata_I[11:7];
+                        imm[31:12] = {20{imm[11]}};
+                    end
+                    B:begin
+                        imm[12] = mem_rdata_I[31];
+                        imm[11] = mem_rdata_I[7];
+                        imm[10:5]  = mem_rdata_I[30:25];
+                        imm[4:1]   = mem_rdata_I[11:8];
+                        imm[0]  = 1'b0;
+                        imm[31:13] = {19{imm[12]}};
+                    end
+                    U:begin
+                        imm[31:12] = mem_rdata_I[31:12];
+                        imm[11:0]  = {12{1'b0}};
+                    end
+                    J:begin
+                        imm[20] = mem_rdata_I[31];
+                        imm[19:12] =  mem_rdata_I[19:12];
+                        imm[11] = mem_rdata_I[20];
+                        imm[10:1]  = mem_rdata_I[30:21];
+                        imm[0]  = 1'b0;
+                        imm[31:21] = {11{imm[20]}};
+                    end
+                    default : imm = 0;
+                endcase
             end
-            B: begin
-                if (alu_out == 0) PC_nxt = PC + imm; // shift left is done by ID ??
-                else              PC_nxt = PC + 3'b100;
-            end
-            J: begin
-                PC_nxt = PC + imm;
-            end
-            default: PC_nxt = PC + 3'b100;
+            default : imm = 0; 
         endcase
     end
-    */
-    //----------------------------------------------------------------//
 
     always @(*) begin // Instruction Decode
-        case(mem_rdata_I[6:0])
-            7'b0110111:begin
-                type = U;   // U-type
-                func = 3'b000;   // LUI
-            end
-            7'b0010111:begin
-                type = U;   // U-type
-                func = 3'b001;   // AUIPC
-            end
-            7'b1101111:begin
-                type = J;   // J-type
-                func = 3'b000;   // JAL
-            end
-            7'b1100111:begin
-                type = I;   // I-type
-                func = 3'b000;   // JALR
-            end
-            7'b1100011:begin
-                type = B;   // B-type
-                case(mem_rdata_I[14:12])
-                    3'b000:begin
-                        func = 3'b000;   // BEQ
+        case(state)
+            ID:begin
+                case(mem_rdata_I[6:0])
+                    7'b0110111:begin
+                        type_nxt = U;   // U-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = 5'b0;
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        func_nxt = 3'b000;   // LUI
                     end
-                    3'b001:begin
-                        func = 3'b001;   // BNE
+                    7'b0010111:begin
+                        type_nxt = U;   // U-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = 5'b0;
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        func_nxt = 3'b001;   // AUIPC
                     end
-                    3'b100:begin
-                        func = 3'b010;   // BLT
+                    7'b1101111:begin
+                        type_nxt = J;   // J-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = 5'b0;
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        func_nxt = 3'b000;   // JAL
                     end
-                    3'b101:begin
-                        func = 3'b011;   // BGE
+                    7'b1100111:begin
+                        type_nxt = I;   // I-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        func_nxt = 3'b000;   // JALR
+                    end
+                    7'b1100011:begin
+                        type_nxt = B;   // B-type
+                        addr_I_nxt[4:0] = 5'b0;
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = mem_rdata_I[24:20];
+                        write_nxt = 0;
+                        case(mem_rdata_I[14:12])
+                            3'b000:begin
+                                func_nxt = 3'b000;   // BEQ
+                            end
+                            3'b001:begin
+                                func_nxt = 3'b001;   // BNE
+                            end
+                            3'b100:begin
+                                func_nxt = 3'b010;   // BLT
+                            end
+                            3'b101:begin
+                                func_nxt = 3'b011;   // BGE
+                            end
+                        default : func_nxt = func;
+                        endcase
+                    end
+                    7'b0000011:begin
+                        type_nxt = I;   // I-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        func_nxt = 3'b001;   // LW
+                    end
+                    7'b0100011:begin
+                        type_nxt = S;   // S-type
+                        addr_I_nxt[4:0] = 5'b0;
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = mem_rdata_I[24:20];
+                        write_nxt = 0;
+                        func_nxt = 3'b000;   // SW
+                    end
+                    7'b0010011:begin
+                        type_nxt = I;   // I-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = 5'b0;
+                        write_nxt = 1;
+                        case(mem_rdata_I[14:12])
+                            3'b000:begin
+                                func_nxt = 3'b010;   // ADDI
+                            end
+                            3'b010:begin
+                                func_nxt = 3'b011;   // SLTI
+                            end
+                            3'b001:begin
+                                func_nxt = 3'b100;   // SLLI
+                            end
+                            3'b101:begin
+                                func_nxt = 3'b101;   // SRLI
+                            end
+                            default : func_nxt = func;
+                        endcase
+                    end
+                    7'b0110011:begin
+                        type_nxt = R;   // R-type
+                        addr_I_nxt[4:0] = mem_rdata_I[11:7];
+                        addr_I_nxt[9:5] = mem_rdata_I[19:15];
+                        addr_I_nxt[14:10] = mem_rdata_I[24:20];
+                        case(mem_rdata_I[31:25])
+                            7'b0000000:begin
+                                func_nxt = 3'b000;   // ADD
+                                write_nxt = 1;
+                            end
+                            7'b0100000:begin
+                                func_nxt = 3'b001;   // SUB
+                                write_nxt = 1;
+                            end
+                            7'b0000001:begin
+                                func_nxt = 3'b010;   // MUL
+                                write_nxt = ready;
+                            end
+                            default:begin
+                                func_nxt = func;
+                                write_nxt = write;
+                            end
+                        endcase
+                    end
+                    default: begin
+                        type_nxt = type;
+                        func_nxt = func;
+                        addr_I_nxt = addr_I;
+                        write_nxt = write;
                     end
                 endcase
             end
-            7'b0000011:begin
-                type = I;   // I-type
-                func = 3'b001;   // LW
-            end
-            7'b0100011:begin
-                type = S;   // S-type
-                func = 3'b000;   // SW
-            end
-            7'b0010011:begin
-                type = I;   // I-type
-                case(mem_rdata_I[14:12])
-                    3'b000:begin
-                        func = 3'b010;   // ADDI
-                    end
-                    3'b010:begin
-                        func = 3'b011;   // SLTI
-                    end
-                    3'b001:begin
-                        func = 3'b100;   // SLLI
-                    end
-                    3'b101:begin
-                        func = 3'b101;   // SRLI
-                    end
-                endcase
-            end
-            7'b0110011:begin
-                type = R;   // R-type
-                case(mem_rdata_I[31:25])
-                    7'b0000000:begin
-                        func = 3'b000;   // ADD
-                    end
-                    7'b0100000:begin
-                        func = 3'b001;   // SUB
-                    end
-                    7'b0000001:begin
-                        func = 3'b010;   // MUL
-                    end
-                endcase
+            default: begin
+                type_nxt = type;
+                func_nxt = func;
+                addr_I_nxt = addr_I;
+                write_nxt = write;
             end
         endcase
     end
@@ -253,142 +322,206 @@ module CHIP(
     //---------------------------------------------------//
     // Subsequent Actions after Instrunction Decode ?
     // OK!!
-    always @(*) begin
-        case(type)
-            R:begin        //R-type
-                case(func)
-                    3'b000:begin    //ADD
-                        write_rd = rs1_data + rs2_data;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
+    //-------------------------------------------------//
+    
+    always @(*) begin  // EX
+        case(state)
+            EX: begin
+                case(type)
+                    R:begin        //R-type
+                        case(func)
+                            3'b000:begin    //ADD
+                                alu_out_nxt = 0;
+                                write_rd_nxt = rs1_data + rs2_data;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b001:begin    //SUB
+                                alu_out_nxt = 0;
+                                write_rd_nxt = rs1_data - rs2_data;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b010:begin    //MUL
+                                //Wait!!
+                                if(ready) begin
+                                    alu_out_nxt = alu_out;
+                                    write_rd_nxt = out[31:0];
+                                    ctrl_nxt = 0;
+                                    PC_nxt = PC + 4;
+                                end
+                                else begin
+                                    alu_out_nxt = 0;
+                                    write_rd_nxt = write_rd;
+                                    ctrl_nxt = 0;
+                                    PC_nxt = PC;
+                                end
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
                     end
-                    3'b001:begin    //SUB
-                        write_rd = rs1_data - rs2_data;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
+                    I:begin        //I-type
+                        case(func)
+                            3'b000:begin    //JALR
+                                alu_out_nxt = 0;
+                                write_rd_nxt = PC + 4;
+                                ctrl_nxt = 0;
+                                PC_nxt = rs1_data + imm;
+                            end
+                            3'b001:begin    //LW have some problem
+                                alu_out_nxt = rs1_data + imm;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                            3'b010:begin    //ADDI
+                                alu_out_nxt = 0;
+                                write_rd_nxt = rs1_data + imm;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b011:begin    //SLTI
+                                alu_out_nxt = 0;
+                                write_rd_nxt = (rs1_data<imm) ? 1'b1 : 1'b0;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b100:begin    //SLLI
+                                alu_out_nxt = 0;
+                                write_rd_nxt = rs1_data <<< imm[4:0];
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b101:begin    //SRLI
+                                alu_out_nxt = 0;
+                                write_rd_nxt = rs1_data >>> imm[4:0];
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
                     end
-                    3'b010:begin    //MUL
-                        //Wait!!
-                        if(ready) begin
-                            write_rd = out[31:0];
-                            ctrl = 0;
-                            write = 1;
-                            PC_nxt = PC + 4;
-                        end
-                        else begin
-                            ctrl = 0;
-                            write = 0;
-                            PC_nxt = PC;
-                        end
+                    S:begin        //S-type
+                        case(func)
+                            3'b000:begin    //SW 
+                                alu_out_nxt = rs1_data + imm;
+                                write_rd_nxt = 0;
+                                ctrl_nxt = 1;
+                                PC_nxt = PC + 4;
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
+                    end
+                    B:begin        //B-type
+                        case(func)
+                            3'b000:begin    //BEQ
+                                check_branch = (rs1_data==rs2_data) ? 1'b1 : 1'b0;
+                                alu_out_nxt = 0;
+                                write_rd_nxt = 0;
+                                ctrl_nxt = 0;
+                                PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                            end
+                            3'b001:begin    //BNE
+                                check_branch = (rs1_data!=rs2_data) ? 1'b1 : 1'b0;
+                                alu_out_nxt = 0;
+                                write_rd_nxt = 0;
+                                ctrl_nxt = 0;
+                                PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                            end
+                            3'b010:begin    //BLT
+                                check_branch = (rs1_data<rs2_data) ? 1'b1 : 1'b0;
+                                alu_out_nxt = 0;
+                                write_rd_nxt = 0;
+                                ctrl_nxt = 0;
+                                PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                            end
+                            3'b011:begin    //BGE
+                                check_branch = (rs1_data>=rs2_data) ? 1'b1 : 1'b0;
+                                alu_out_nxt = 0;
+                                write_rd_nxt = 0;
+                                ctrl_nxt = 0;
+                                PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
+                    end
+                    U:begin        //U-type
+                        case(func)
+                            3'b000:begin    //LUI
+                                alu_out_nxt = 0;
+                                write_rd_nxt = imm;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            3'b001:begin    //AUIPC
+                                alu_out_nxt = 0;
+                                write_rd_nxt = PC + imm;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + 4;
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
+                    end
+                    J:begin        //J-type
+                        case(func)
+                            3'b000:begin    //JAL
+                                alu_out_nxt = 0;
+                                write_rd_nxt = PC + 4;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC + imm;
+                            end
+                            default:begin
+                                alu_out_nxt = alu_out;
+                                write_rd_nxt = write_rd;
+                                ctrl_nxt = 0;
+                                PC_nxt = PC;
+                            end
+                        endcase
+                    end
+                    default:begin
+                        alu_out_nxt = alu_out;
+                        write_rd_nxt = write_rd;
+                        ctrl_nxt = 0;
+                        PC_nxt = PC;
                     end
                 endcase
             end
-            I:begin        //I-type
-                case(func)
-                    3'b000:begin    //JALR
-                        write_rd = PC + 4;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = rs1_data + imm;
-                    end
-                    3'b001:begin    //LW
-                        alu_out = rs1_data + imm;
-                        write_rd = mem_rdata_D;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                    3'b010:begin    //ADDI
-                        write_rd = rs1_data + imm;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                    3'b011:begin    //SLTI
-                        write_rd = (rs1_data<imm) ? 1 : 0;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                    3'b100:begin    //SLLI
-                        write_rd = rs1_data <<< imm[4:0];
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                    3'b101:begin    //SRLI
-                        write_rd = rs1_data >>> imm[4:0];
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                endcase
+            MW: begin
+                write_rd_nxt = (type == I && func == 3'b001) ? mem_rdata_D : write_rd;
+                ctrl_nxt = ctrl;
+                alu_out_nxt = alu_out;
+                PC_nxt = PC + 4;
             end
-            S:begin        //S-type
-                case(func)
-                    3'b000:begin    //SW
-                        alu_out = rs1_data + imm;
-                        ctrl = 1;
-                        write = 0;
-                        PC_nxt = PC + 4;
-                    end
-                endcase
-            end
-            B:begin        //B-type
-                case(func)
-                    3'b000:begin    //BEQ
-                        check_branch = (rs1_data==rs2_data) ? 1 :0;
-                        ctrl = 0;
-                        write = 0;
-                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
-                    end
-                    3'b001:begin    //BNE
-                        check_branch = (rs1_data!=rs2_data) ? 1 :0;
-                        ctrl = 0;
-                        write = 0;
-                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
-                    end
-                    3'b010:begin    //BLT
-                        check_branch = (rs1_data<rs2_data) ? 1 :0;
-                        ctrl = 0;
-                        write = 0;
-                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
-                    end
-                    3'b011:begin    //BGE
-                        check_branch = (rs1_data>=rs2_data) ? 1 :0;
-                        ctrl = 0;
-                        write = 0;
-                        PC_nxt = (check_branch) ? (PC+imm) : (PC+4);
-                    end
-                endcase
-            end
-            U:begin        //U-type
-                case(func)
-                    3'b000:begin    //LUI
-                        write_rd = imm;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                    3'b001:begin    //AUIPC
-                        write_rd = PC + imm;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + 4;
-                    end
-                endcase
-            end
-            J:begin        //J-type
-                case(func)
-                    3'b000:begin    //JAL
-                        write_rd = PC + 4;
-                        ctrl = 0;
-                        write = 1;
-                        PC_nxt = PC + imm;
-                    end
-                endcase
+            default:begin
+                alu_out_nxt = alu_out;
+                write_rd_nxt = write_rd;
+                ctrl_nxt = 0;
+                PC_nxt = PC;
             end
         endcase
     end
@@ -396,13 +529,27 @@ module CHIP(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
-            type <= 0;
-            func <= 0;
+            state <= ID;
+            type <= 3'b110;   // invalid
+            func <= 3'b110;   // invalid
+            write_rd <= 0;
+            alu_out <= 0;
+            write <= 0;
+            ctrl <= 0;
+            addr_I <= 0;
         end
         else begin
             PC <= PC_nxt;
+            state <= state_nxt;
+            type <= type_nxt;
+            func <= func_nxt;
+            write_rd <= write_rd_nxt;
+            alu_out <= alu_out_nxt;
+            write <= write_nxt;
+            ctrl <= ctrl_nxt;
+            addr_I <= addr_I_nxt;
         end 
-        /*$display("============================================================");
+        $display("============================================================");
         $display("PC:%H", PC);
         $display("Instruction:%H", mem_rdata_I);
         $display("RD :", rd, ", Data:%H", rd_data);
@@ -410,8 +557,8 @@ module CHIP(
         $display("RS2:", rs2, ", Data:%H", rs2_data);
         $display("Imm:%H", imm);
         $display("ready:%b", ready);
-        $display("type:", type, ", func:", func);
-        $display("============================================================\n");*/
+        $display("state:", state, ", type:", type, ", func:", func);
+        $display("============================================================\n");
     end
 endmodule
 
