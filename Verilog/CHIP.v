@@ -556,8 +556,8 @@ module CHIP(
         if (!rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= ID;
-            type <= 3'b110;   // invalid
-            func <= 3'b110;   // invalid
+            type <= R;   // (invalid) return to R
+            func <= 3'b000;   // (invalid) return to 3'b000
             write_rd <= 0;
             alu_out <= 0;
             write <= 0;
